@@ -71,6 +71,7 @@ const EASTER_EGGS: &[&str] = &[
     "COGITO ERGO SUM",
     "WHY DO MY EYES HURT",
     "BECAUSE YOUVE NEVER USED THEM BEFORE",
+    "THE CAKE IS A LIE",
 ];
 
 /// A single falling stream/column of characters
@@ -124,9 +125,16 @@ impl MatrixRain {
 
     fn populate_streams(&mut self) {
         let mut rng = rand::rng();
-        // Create streams for most columns, staggered
+        // Figure out which columns already have a stream
+        let mut col_has_stream = vec![false; self.width as usize];
+        for stream in &self.streams {
+            if (stream.col as usize) < col_has_stream.len() {
+                col_has_stream[stream.col as usize] = true;
+            }
+        }
+        // Create streams for empty columns, staggered
         for col in 0..self.width {
-            if rng.random_range(0..100) < 70 {
+            if !col_has_stream[col as usize] && rng.random_range(0..100) < 70 {
                 self.spawn_stream(col, true);
             }
         }
@@ -274,7 +282,21 @@ impl MatrixRain {
     fn resize(&mut self, width: u16, height: u16) {
         self.width = width;
         self.height = height;
+        // Drop streams that are now off-screen horizontally
         self.streams.retain(|s| s.col < width);
+        // Clamp trail lengths so they don't wildly exceed the new height
+        for stream in &mut self.streams {
+            if stream.length > height.max(8).min(40) {
+                stream.length = height.max(8).min(40);
+            }
+        }
+        // Kill flash message if it no longer fits
+        if let Some(ref flash) = self.flash_message {
+            if flash.row >= height || flash.start_col + flash.text.len() as u16 > width {
+                self.flash_message = None;
+            }
+        }
+        // Fill any new/empty columns
         self.populate_streams();
     }
 }
